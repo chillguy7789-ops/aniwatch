@@ -23,7 +23,7 @@ import pkgJson from "../package.json" with { type: "json" };
 const BASE_PATH = "/api/v2" as const;
 
 const app = new Hono<ServerContext>();
-import { proxyRouter } from "./routes/proxy.js";
+
 app.use(logging);
 app.use(corsConfig);
 app.use(cacheControl);
@@ -57,6 +57,7 @@ app.get("/v", async (c) =>
 app.use(cacheConfigSetter(BASE_PATH.length));
 
 app.basePath(BASE_PATH).route("/hianime", hianimeRouter);
+app.basePath(BASE_PATH).route("/proxy", proxyRouter);
 app.basePath(BASE_PATH).get("/anicrush", (c) =>
     c.text("Anicrush could be implemented in future.")
 );
