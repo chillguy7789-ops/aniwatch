@@ -13,6 +13,7 @@ import { errorHandler, notFoundHandler } from "./config/errorHandler.js";
 import type { ServerContext } from "./config/context.js";
 
 import { hianimeRouter } from "./routes/hianime.js";
+import { proxyRouter } from "./routes/proxy.js";
 import { logging } from "./middleware/logging.js";
 import { cacheConfigSetter, cacheControl } from "./middleware/cache.js";
 
@@ -20,7 +21,7 @@ import pkgJson from "../package.json" with { type: "json" };
 
 //
 const BASE_PATH = "/api/v2" as const;
-
+app.basePath(BASE_PATH).route("/proxy", proxyRouter);
 const app = new Hono<ServerContext>();
 
 app.use(logging);
