@@ -21,9 +21,9 @@ import pkgJson from "../package.json" with { type: "json" };
 
 //
 const BASE_PATH = "/api/v2" as const;
-app.basePath(BASE_PATH).route("/proxy", proxyRouter);
-const app = new Hono<ServerContext>();
 
+const app = new Hono<ServerContext>();
+import { proxyRouter } from "./routes/proxy.js";
 app.use(logging);
 app.use(corsConfig);
 app.use(cacheControl);
