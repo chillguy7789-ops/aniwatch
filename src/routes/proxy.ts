@@ -3,7 +3,7 @@ import { Hono } from "hono";
 const proxyRouter = new Hono();
 
 // Handle preflight for null-origin local file requests
-proxyRouter.options("/m3u8", (c) => {
+proxyRouter.options("/m3u8", (_c) => {
   return new Response(null, {
     status: 204,
     headers: {
