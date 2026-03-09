@@ -20,9 +20,9 @@
         button { background: var(--accent); color: #000; border: none; padding: 0 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: 'Outfit'; }
         #status { font-size: 11px; color: var(--dim); text-align: center; min-height: 15px; text-transform: uppercase; letter-spacing: 1px; }
         .results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-height: 250px; overflow-y: auto; }
-        .anime-item { background: #111; padding: 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid #222; transition: 0.2s; display: flex; justify-content: space-between; }
+        .anime-item { background: #111; padding: 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid #222; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
         .anime-item:hover { border-color: #444; background: #161616; }
-        .anime-item span { color: var(--dim); font-size: 11px; }
+        .anime-item span { color: var(--dim); font-size: 10px; background: #222; padding: 2px 6px; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -36,7 +36,7 @@
             </div>
             <div class="controls">
                 <div class="search-row">
-                    <input type="text" id="query" placeholder="Search anime (e.g. One Piece)">
+                    <input type="text" id="query" placeholder="Search (e.g. One Piece)">
                     <button onclick="searchAnime()">FIND</button>
                 </div>
                 <div id="status">Ready</div>
@@ -55,7 +55,7 @@ async function searchAnime() {
     const status = document.getElementById('status');
     if (!q) return;
 
-    status.innerText = "🔍 Searching Database...";
+    status.innerText = "🔍 Searching...";
     resDiv.innerHTML = "";
 
     try {
@@ -63,96 +63,65 @@ async function searchAnime() {
         const json = await res.json();
         const animeList = json.data.animes;
         
-        if (!animeList || animeList.length === 0) {
-            status.innerText = "No results found.";
-            return;
-        }
-
-        animeList.slice(0, 6).forEach(anime => {
+        animeList.slice(0, 8).forEach(anime => {
             const div = document.createElement('div');
             div.className = 'anime-item';
-            div.innerHTML = `<div>${anime.name}</div><span>${anime.jname || ''}</span>`;
-            div.onclick = () => getEpisodes(anime.id);
+            div.innerHTML = `<div>${anime.name}</div><span>${anime.id}</span>`;
+            // Direct play on click
+            div.onclick = () => startStreaming(anime.id);
             resDiv.appendChild(div);
         });
-        status.innerText = "Select an anime to play:";
+        status.innerText = "Tap an anime to play Episode 1";
     } catch (e) {
-        status.innerText = "Search failed. Try again.";
+        status.innerText = "Search Error. Try again.";
     }
 }
 
-async function getEpisodes(animeId) {
+async function startStreaming(id) {
     const status = document.getElementById('status');
-    status.innerText = "🚀 Loading Episode List...";
-    document.getElementById('results').innerHTML = "";
+    status.innerText = "📡 Initializing Stream...";
+    
+    // We try multiple endpoint patterns to ensure we hit the right one
+    const configs = [
+        `${API_BASE}/episode/sources?animeEpisodeId=${id}`,
+        `${API_BASE}/episode/sources?animeEpisodeId=${id}&server=hd-1&category=sub`,
+        `${API_BASE}/episode/sources?animeEpisodeId=${id}-episode-1&server=megacloud&category=sub`
+    ];
 
-    try {
-        const res = await fetch(`${API_BASE}/anime/${animeId}`);
-        const json = await res.json();
-        
-        if (!json.data || !json.data.episodes || json.data.episodes.length === 0) {
-            throw new Error("No episodes found.");
+    for (let url of configs) {
+        try {
+            status.innerText = "📡 Testing Server Connection...";
+            const res = await fetch(url);
+            const json = await res.json();
+            
+            if (json.data && json.data.sources && json.data.sources.length > 0) {
+                return playVideo(json.data.sources[0].url);
+            }
+        } catch (e) {
+            console.log("Config failed, trying next...");
         }
-
-        // We automatically target Episode 1 for the quick test
-        const firstEpId = json.data.episodes[0].episodeId;
-        fetchStream(firstEpId);
-    } catch (e) {
-        status.innerText = "❌ Info Error: " + e.message;
     }
+    
+    status.innerText = "❌ All servers failed. Try a different show.";
 }
 
-async function fetchStream(epId) {
-    const status = document.getElementById('status');
+function playVideo(m3u8) {
     const video = document.getElementById('video');
-    status.innerText = "📡 Identifying Servers...";
+    const status = document.getElementById('status');
+    const finalLink = `${PROXY_URL}?url=${encodeURIComponent(m3u8)}`;
 
-    try {
-        // Step 1: Find which servers are hosting this episode
-        const serverRes = await fetch(`${API_BASE}/servers?episodeId=${epId}`);
-        const serverJson = await serverRes.json();
-        
-        if (!serverJson.data || !serverJson.data.sub || serverJson.data.sub.length === 0) {
-            throw new Error("No active servers.");
-        }
-
-        // Step 2: Pick the primary server (usually hd-1)
-        const serverName = serverJson.data.sub[0].serverName;
-        status.innerText = `🔗 Connecting to ${serverName.toUpperCase()}...`;
-
-        // Step 3: Get the actual M3U8 source link
-        const sourceRes = await fetch(`${API_BASE}/episode/sources?animeEpisodeId=${epId}&server=${serverName}&category=sub`);
-        const sourceJson = await sourceRes.json();
-
-        if (!sourceJson.data || !sourceJson.data.sources || sourceJson.data.sources.length === 0) {
-            throw new Error("Source restricted or blocked.");
-        }
-
-        const m3u8 = sourceJson.data.sources[0].url;
-        const finalLink = `${PROXY_URL}?url=${encodeURIComponent(m3u8)}`;
-
-        // Step 4: Initialize Player
-        if (Hls.isSupported()) {
-            const hls = new Hls({
-                xhrSetup: function(xhr) { xhr.withCredentials = false; }
-            });
-            hls.loadSource(finalLink);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                video.play();
-                status.innerText = "🎬 Now Playing";
-            });
-            hls.on(Hls.Events.ERROR, (event, data) => {
-                if (data.fatal) status.innerText = "⚠️ Buffer Error: Retrying...";
-            });
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = finalLink;
+    if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(finalLink);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
             video.play();
             status.innerText = "🎬 Now Playing";
-        }
-    } catch (e) {
-        status.innerText = "❌ Stream Error: Try another show.";
-        console.error(e);
+        });
+    } else {
+        video.src = finalLink;
+        video.play();
+        status.innerText = "🎬 Now Playing";
     }
 }
 </script>
