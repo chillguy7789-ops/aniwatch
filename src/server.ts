@@ -13,38 +13,66 @@ import { errorHandler, notFoundHandler } from "./config/errorHandler.js";
 import type { ServerContext } from "./config/context.js";
 
 import { hianimeRouter } from "./routes/hianime.js";
-import { proxyRouter } from "./routes/proxy.js";
 import { logging } from "./middleware/logging.js";
 import { cacheConfigSetter, cacheControl } from "./middleware/cache.js";
 
 import pkgJson from "../package.json" with { type: "json" };
 
-//
 const BASE_PATH = "/api/v2" as const;
 
+// 1. Initialize the app first!
 const app = new Hono<ServerContext>();
 
+// 2. Attach Global Middleware
 app.use(logging);
 app.use(corsConfig);
 app.use(cacheControl);
 
 /*
+    -------------------------------------------------------
+    SWACH CUSTOM PLAYER PROXY
+    This bypasses CORS and Referer blocks for your mobile app.
+    -------------------------------------------------------
+*/
+app.get('/swach/proxy', async (c) => {
+  const streamUrl = c.req.query('url');
+  const referer = c.req.query('referer') || 'https://hianime.to/';
+
+  if (!streamUrl) return c.text('No URL provided', 400);
+
+  try {
+      const response = await fetch(streamUrl, {
+        headers: {
+          'Referer': referer,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+
+      // Pass the stream body directly to the client (phone)
+      return c.body(response.body, {
+        headers: {
+          'Content-Type': response.headers.get('Content-Type') || 'application/vnd.apple.mpegurl',
+          'Access-Control-Allow-Origin': '*', 
+          'Cache-Control': 'public, max-age=3600'
+        }
+      });
+  } catch (err: any) {
+      log.error(`Proxy Error: ${err.message}`);
+      return c.text("Proxy Error: " + err.message, 500);
+  }
+});
+
+/*
     CAUTION: 
     Having the "ANIWATCH_API_HOSTNAME" env will
     enable rate limitting for the deployment.
-    WARNING:
-    If you are using any serverless environment, you must set the
-    "ANIWATCH_API_DEPLOYMENT_ENV" to that environment's name, 
-    otherwise you may face issues.
 */
 const isPersonalDeployment = Boolean(env.ANIWATCH_API_HOSTNAME);
 if (isPersonalDeployment) {
     app.use(ratelimit);
 }
 
-// if (env.ANIWATCH_API_DEPLOYMENT_ENV === DeploymentEnv.NODEJS) {
 app.use("/", serveStatic({ root: "public" }));
-// }
 
 app.get("/health", (c) => c.text("daijoubu", { status: 200 }));
 app.get("/v", async (c) =>
@@ -56,8 +84,8 @@ app.get("/v", async (c) =>
 
 app.use(cacheConfigSetter(BASE_PATH.length));
 
+// Routes
 app.basePath(BASE_PATH).route("/hianime", hianimeRouter);
-app.basePath(BASE_PATH).route("/proxy", proxyRouter);
 app.basePath(BASE_PATH).get("/anicrush", (c) =>
     c.text("Anicrush could be implemented in future.")
 );
@@ -65,14 +93,8 @@ app.basePath(BASE_PATH).get("/anicrush", (c) =>
 app.notFound(notFoundHandler);
 app.onError(errorHandler);
 
-//
+// Server Execution
 (function () {
-    /*
-        NOTE:
-        "ANIWATCH_API_DEPLOYMENT_MODE" env must be set to
-        its supported name for serverless deployments
-        Eg: "vercel" for vercel deployments
-    */
     if (SERVERLESS_ENVIRONMENTS.includes(env.ANIWATCH_API_DEPLOYMENT_ENV)) {
         return;
     }
@@ -99,16 +121,7 @@ app.onError(errorHandler);
         execGracefulShutdown(server);
     });
 
-    /*
-        CAUTION:
-        The `if` below block is for `render free deployments` only,
-        as their free tier has an approx 10 or 15 minute sleep time.
-        This is to keep the server awake and prevent it from sleeping.
-        You can enable the automatic health check by setting the
-        environment variables "ANIWATCH_API_HOSTNAME" to your deployment's hostname,
-        and "ANIWATCH_API_DEPLOYMENT_ENV" to "render" in your environment variables.
-        If you are not using render, you can remove the below `if` block.
-    */
+    // Render Anti-Sleep Logic
     if (
         isPersonalDeployment &&
         env.ANIWATCH_API_DEPLOYMENT_ENV === DeploymentEnv.RENDER
@@ -116,7 +129,6 @@ app.onError(errorHandler);
         const INTERVAL_DELAY = 8 * 60 * 1000; // 8mins
         const url = new URL(`https://${env.ANIWATCH_API_HOSTNAME}/health`);
 
-        // don't sleep
         setInterval(() => {
             https
                 .get(url.href)
