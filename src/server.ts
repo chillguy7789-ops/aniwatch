@@ -19,30 +19,33 @@ import { cacheConfigSetter, cacheControl } from "./middleware/cache.js";
 import pkgJson from "../package.json" with { type: "json" };
 
 const BASE_PATH = "/api/v2" as const;
-
-// 1. Initialize the app
 const app = new Hono<ServerContext>();
 
-// 2. Attach Global Middleware
+// 1. GLOBAL MIDDLEWARE
 app.use(logging);
 app.use(corsConfig);
 app.use(cacheControl);
 
 /**
- * SWACH MANIFEST REWRITER
- * This function intercepts the .m3u8 file and rewrites the segment URLs
- * so they all go through your proxy instead of being blocked by the host.
+ * 2. STATIC FILES (THE SWACH FRONTEND)
+ * We move this to the top so it intercepts requests to "/" 
+ * and serves index.html from your public folder.
+ */
+app.use("/", serveStatic({ root: "public" }));
+app.use("/index.html", serveStatic({ path: "./public/index.html" }));
+
+/**
+ * 3. SWACH MANIFEST REWRITER
  */
 function rewriteManifest(manifest: string, proxyBase: string, targetBase: string) {
   return manifest.replace(/^(?!http|#)(.*)$/gm, (match) => {
-    // If the line is a relative path, we make it absolute and wrap it in our proxy
     const fullUrl = match.startsWith('/') ? new URL(match, targetBase).href : targetBase + match;
     return `${proxyBase}?url=${encodeURIComponent(fullUrl)}`;
   });
 }
 
 /**
- * SWACH CUSTOM PLAYER PROXY (Version 4.0 - Manifest Aware)
+ * 4. SWACH CUSTOM PLAYER PROXY
  */
 app.get('/swach/proxy', async (c) => {
   const streamUrl = c.req.query('url');
@@ -52,7 +55,6 @@ app.get('/swach/proxy', async (c) => {
 
   try {
     const urlObj = new URL(streamUrl);
-    // Determine the base path for relative segments in the .m3u8
     const targetBase = urlObj.origin + urlObj.pathname.substring(0, urlObj.pathname.lastIndexOf('/') + 1);
 
     const response = await fetch(streamUrl, {
@@ -63,12 +65,10 @@ app.get('/swach/proxy', async (c) => {
       }
     });
 
-    // Check if we're dealing with a manifest (M3U8) or a video segment (TS)
     const isManifest = streamUrl.includes('.m3u8');
 
     if (isManifest) {
       let manifestText = await response.text();
-      // Rewrite the manifest so every segment link points back to THIS proxy
       const rewritten = rewriteManifest(
         manifestText, 
         `https://aniwatch-g3v0.onrender.com/swach/proxy`, 
@@ -83,7 +83,6 @@ app.get('/swach/proxy', async (c) => {
         }
       });
     } else {
-      // It's a video segment (.ts file), pipe it directly as binary
       return c.body(response.body as any, {
         status: response.status as any,
         headers: {
@@ -99,17 +98,11 @@ app.get('/swach/proxy', async (c) => {
   }
 });
 
-/*
-    CAUTION: 
-    Having the "ANIWATCH_API_HOSTNAME" env will
-    enable rate limitting for the deployment.
-*/
+// 5. API ROUTES
 const isPersonalDeployment = Boolean(env.ANIWATCH_API_HOSTNAME);
 if (isPersonalDeployment) {
     app.use(ratelimit);
 }
-
-app.use("/", serveStatic({ root: "public" }));
 
 app.get("/health", (c) => c.text("daijoubu", { status: 200 }));
 app.get("/v", async (c) =>
@@ -120,17 +113,12 @@ app.get("/v", async (c) =>
 );
 
 app.use(cacheConfigSetter(BASE_PATH.length));
-
-// Routes
 app.basePath(BASE_PATH).route("/hianime", hianimeRouter);
-app.basePath(BASE_PATH).get("/anicrush", (c) =>
-    c.text("Anicrush could be implemented in future.")
-);
 
 app.notFound(notFoundHandler);
 app.onError(errorHandler);
 
-// Server Execution
+// 6. SERVER EXECUTION
 (function () {
     if (SERVERLESS_ENVIRONMENTS.includes(env.ANIWATCH_API_DEPLOYMENT_ENV)) {
         return;
@@ -158,27 +146,18 @@ app.onError(errorHandler);
         execGracefulShutdown(server);
     });
 
-    // Render Anti-Sleep Logic
     if (
         isPersonalDeployment &&
         env.ANIWATCH_API_DEPLOYMENT_ENV === DeploymentEnv.RENDER
     ) {
         const INTERVAL_DELAY = 8 * 60 * 1000; // 8mins
         const url = new URL(`https://${env.ANIWATCH_API_HOSTNAME}/health`);
-
         setInterval(() => {
-            https
-                .get(url.href)
-                .on("response", () => {
-                    log.info(
-                        `aniwatch-api HEALTH_CHECK at ${new Date().toISOString()}`
-                    );
-                })
-                .on("error", (err) =>
-                    log.warn(
-                        `aniwatch-api HEALTH_CHECK failed; ${err.message.trim()}`
-                    )
-                );
+            https.get(url.href).on("response", () => {
+                log.info(`aniwatch-api HEALTH_CHECK at ${new Date().toISOString()}`);
+            }).on("error", (err) =>
+                log.warn(`aniwatch-api HEALTH_CHECK failed; ${err.message.trim()}`)
+            );
         }, INTERVAL_DELAY);
     }
 })();
