@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swach</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Swach">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon-192.png" sizes="192x192">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+/* ─── YOUR ORIGINAL DESIGN TOKENS ─── */
+:root {
+  --bg0: #000000;
+  --bg1: #0a0a0a;
+  --bg2: #111111;
+  --bg3: #191919;
+  --bg4: #222222;
+  --accent: #ffffff;
+  --accent2: #cccccc;
+  --text0: #eeecff;
+  --text1: #a8a4c0;
+  --text2: #58566a;
+  --border: rgba(255,255,255,0.07);
+  --r: 10px;
+}
+
+/* Base resets & scrollbars */
+*{margin:0;padding:0;box-sizing:border-box}
+body{ font-family:'Sora',sans-serif; background:var(--bg0); color:var(--text0); min-height:100vh; overflow-x:hidden; }
+
+/* ─── NAVIGATION ─── */
+#nav{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  height:62px;padding:0 20px;
+  display:flex;align-items:center;gap:16px;
+  background:rgba(0,0,0,0.92);
+  backdrop-filter:blur(24px) saturate(1.5);
+  border-bottom:1px solid var(--border);
+}
+.logo{ font-family:'Outfit',sans-serif;font-weight:900;font-size:21px; color:#ffffff; cursor:pointer; }
+
+/* ─── WATCH PAGE LAYOUT ─── */
+.watchpage{ max-width:1440px; margin:0 auto; padding:80px 20px 48px; }
+.pwrap{
+  background:#000; border-radius:var(--r); overflow:hidden;
+  position:relative; aspect-ratio:16/9; border: 1px solid var(--border);
+}
+#video-player { width: 100%; height: 100%; }
+
+/* ─── SEARCH & INPUTS ─── */
+.input-section { margin-top: 20px; display: flex; gap: 10px; }
+input { 
+  flex: 1; padding: 12px; border-radius: var(--r); 
+  background: var(--bg2); border: 1px solid var(--border); 
+  color: white; outline: none; 
+}
+button { 
+  padding: 12px 24px; border-radius: var(--r); border: none; 
+  background: #ffffff; color: #000; font-weight: 600; cursor: pointer; 
+}
+
+/* Status text */
+#status { font-size: 12px; color: var(--text2); margin-top: 10px; text-align: center; }
+
+/* ─── PWA BANNER ─── */
+.install-banner{
+  position:fixed;bottom:68px;left:12px;right:12px;z-index:400;
+  background:var(--bg2);border:1px solid rgba(255,255,255,.12);border-radius:14px;
+  padding:14px 16px;display:flex;align-items:center;gap:12px;
+  box-shadow:0 8px 40px rgba(0,0,0,.6);
+}
+</style>
+</head>
+<body>
+
+<nav id="nav">
+    <div class="logo">SWACH</div>
+</nav>
+
+<main class="watchpage">
+    <div class="pwrap">
+        <video id="video-player" controls playsinline></video>
+    </div>
+
+    <div class="input-section">
+        <input type="text" id="anime-id" placeholder="Enter Episode ID (e.g., steins-gate-1)">
+        <button onclick="playEpisode()">PLAY</button>
+    </div>
+    
+    <p id="status">Ready to stream...</p>
+</main>
+
+<script>
+/**
+ * THE SWACH ENGINE
+ * Re-calibrated for the Render Proxy.
+ */
+
+// Your new Render Backend URL
+const SERVER_URL = "https://aniwatch-g3v0.onrender.com";
+const PROXY_ENDPOINT = `${SERVER_URL}/swach/proxy`;
+const API_WATCH_ENDPOINT = `${SERVER_URL}/api/v2/hianime/watch`;
+
+async function playEpisode() {
+    const id = document.getElementById('anime-id').value;
+    const status = document.getElementById('status');
+    const video = document.getElementById('video-player');
+
+    if (!id) return alert("Please enter an Episode ID!");
+
+    status.innerText = "🔍 Fetching source from API...";
+
+    try {
+        // 1. Get raw video data from your Hianime API
+        const response = await fetch(`${API_WATCH_ENDPOINT}?episodeId=${id}`);
+        const data = await response.json();
+        
+        if (!data.sources || data.sources.length === 0) {
+            throw new Error("No video sources found.");
+        }
+
+        // 2. Select the first source (.m3u8)
+        const rawM3u8 = data.sources[0].url;
+
+        // 3. Construct the Proxied URL
+        // We use encodeURIComponent to ensure the full link passes through safely
+        const proxiedUrl = `${PROXY_ENDPOINT}?url=${encodeURIComponent(rawM3u8)}`;
+
+        status.innerText = "🌀 Manifest Rewriting in progress... Please wait.";
+
+        // 4. Initialize HLS.js for Android/Chrome or native for Safari/iOS
+        if (Hls.isSupported()) {
+            const hls = new Hls();
+            hls.loadSource(proxiedUrl);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                status.innerText = "✅ Stream active.";
+                video.play();
+            });
+            
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    status.innerText = "❌ Proxy Blocked. Check Render logs.";
+                }
+            });
+        } 
+        else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            // Native support for Safari (iPhone)
+            video.src = proxiedUrl;
+            video.play();
+            status.innerText = "✅ Streaming natively.";
+        }
+    } catch (err) {
+        status.innerText = `⚠️ Error: ${err.message}`;
+        console.error(err);
+    }
+}
+
+/* ─── PWA INSTALL LOGIC ─── */
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _deferredInstall = e;
+  setTimeout(showInstallBanner, 4000);
+});
+
+function showInstallBanner() {
+  if(!_deferredInstall) return;
+  const b = document.createElement('div');
+  b.className = 'install-banner';
+  b.innerHTML = `
+    <div style="flex:1">
+      <div style="font-size:13px;font-weight:600">Install Swach</div>
+      <div style="font-size:11px;color:var(--text2)">Add to Home Screen for the full experience</div>
+    </div>
+    <button onclick="doInstall()" style="padding:8px 16px; font-size:11px">Install</button>
+  `;
+  document.body.appendChild(b);
+}
+
+async function doInstall() {
+  if(!_deferredInstall) return;
+  _deferredInstall.prompt();
+  _deferredInstall = null;
+  document.querySelector('.install-banner').remove();
+}
+</script>
+</body>
+</html>
