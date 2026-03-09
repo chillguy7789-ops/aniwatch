@@ -7,15 +7,13 @@ import { log } from "./config/logger.js";
 import { corsConfig } from "./config/cors.js";
 import { ratelimit } from "./config/ratelimit.js";
 import { execGracefulShutdown } from "./utils.js";
-import { DeploymentEnv, env, SERVERLESS_ENVIRONMENTS } from "./config/env.js";
+import { env, SERVERLESS_ENVIRONMENTS } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./config/errorHandler.js";
 import type { ServerContext } from "./config/context.js";
 
 import { hianimeRouter } from "./routes/hianime.js";
 import { logging } from "./middleware/logging.js";
 import { cacheConfigSetter, cacheControl } from "./middleware/cache.js";
-
-import pkgJson from "../package.json" with { type: "json" };
 
 const BASE_PATH = "/api/v2" as const;
 const app = new Hono<ServerContext>();
@@ -26,11 +24,9 @@ app.use(corsConfig);
 app.use(cacheControl);
 
 /**
- * 2. STATIC FILES (THE SWACH FRONTEND) - ABSOLUTE PRIORITY
+ * 2. STATIC FILES (SWACH FRONTEND)
  */
-// This serves the public folder
 app.use("/*", serveStatic({ root: "public" }));
-// This specifically forces the root to serve index.html
 app.get("/", serveStatic({ path: "./public/index.html" }));
 
 /**
@@ -92,8 +88,20 @@ app.onError(errorHandler);
     if (SERVERLESS_ENVIRONMENTS.includes(env.ANIWATCH_API_DEPLOYMENT_ENV)) return;
     const server = serve({ port: env.ANIWATCH_API_PORT, fetch: app.fetch })
     .addListener("listening", () => log.info(`SWACH READY`));
+
     process.on("SIGINT", () => execGracefulShutdown(server));
     process.on("SIGTERM", () => execGracefulShutdown(server));
+
+    // Health Check Loop
+    if (isPersonalDeployment && env.ANIWATCH_API_HOSTNAME) {
+        const INTERVAL_DELAY = 8 * 60 * 1000;
+        const url = `https://${env.ANIWATCH_API_HOSTNAME}/health`;
+        setInterval(() => {
+            https.get(url, (res) => {
+                if (res.statusCode === 200) log.info("HEALTH_CHECK: OK");
+            }).on("error", (e) => log.warn(`HEALTH_CHECK: ${e.message}`));
+        }, INTERVAL_DELAY);
+    }
 })();
 
 export default app;
