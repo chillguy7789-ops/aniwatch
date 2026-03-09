@@ -15,12 +15,14 @@
         .video-container { width: 100%; aspect-ratio: 16/9; background: #000; position: relative; }
         video { width: 100%; height: 100%; background: #000; }
         .controls { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-        .search-row { display: flex; gap: 10px; }
+        .search-row, .ep-row { display: flex; gap: 10px; }
         input { flex: 1; background: #111; border: 1px solid #222; padding: 12px; border-radius: 8px; color: #fff; outline: none; font-family: inherit; }
-        button { background: var(--accent); color: #000; border: none; padding: 0 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: 'Outfit'; }
+        .ep-input { max-width: 80px; text-align: center; }
+        button { background: var(--accent); color: #000; border: none; padding: 0 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: 'Outfit'; transition: 0.2s; }
+        button:active { transform: scale(0.95); opacity: 0.8; }
         #status { font-size: 11px; color: var(--dim); text-align: center; min-height: 15px; text-transform: uppercase; letter-spacing: 1px; }
-        .results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-height: 250px; overflow-y: auto; }
-        .anime-item { background: #111; padding: 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid #222; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
+        .results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-height: 200px; overflow-y: auto; }
+        .anime-item { background: #111; padding: 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
         .anime-item:hover { border-color: #444; background: #161616; }
         .anime-item span { color: var(--dim); font-size: 10px; background: #222; padding: 2px 6px; border-radius: 4px; }
     </style>
@@ -36,10 +38,13 @@
             </div>
             <div class="controls">
                 <div class="search-row">
-                    <input type="text" id="query" placeholder="Search (e.g. One Piece)">
+                    <input type="text" id="query" placeholder="Search (e.g. Naruto)">
                     <button onclick="searchAnime()">FIND</button>
                 </div>
-                <div id="status">Ready</div>
+                <div class="ep-row">
+                    <input type="number" id="epNum" class="ep-input" value="1" placeholder="Ep">
+                    <div id="status" style="flex:1; align-self: center;">Ready</div>
+                </div>
                 <div id="results" class="results"></div>
             </div>
         </div>
@@ -48,6 +53,7 @@
 <script>
 const API_BASE = "/api/v2/hianime";
 const PROXY_URL = "/swach/proxy";
+let currentAnimeId = "";
 
 async function searchAnime() {
     const q = document.getElementById('query').value;
@@ -63,34 +69,41 @@ async function searchAnime() {
         const json = await res.json();
         const animeList = json.data.animes;
         
-        animeList.slice(0, 8).forEach(anime => {
+        animeList.slice(0, 6).forEach(anime => {
             const div = document.createElement('div');
             div.className = 'anime-item';
             div.innerHTML = `<div>${anime.name}</div><span>${anime.id}</span>`;
-            // Direct play on click
-            div.onclick = () => startStreaming(anime.id);
+            div.onclick = () => {
+                currentAnimeId = anime.id;
+                startStreaming();
+            };
             resDiv.appendChild(div);
         });
-        status.innerText = "Tap an anime to play Episode 1";
+        status.innerText = "Select an anime";
     } catch (e) {
-        status.innerText = "Search Error. Try again.";
+        status.innerText = "Search Error.";
     }
 }
 
-async function startStreaming(id) {
+async function startStreaming() {
+    if (!currentAnimeId) return;
     const status = document.getElementById('status');
-    status.innerText = "📡 Initializing Stream...";
-    
-    // We try multiple endpoint patterns to ensure we hit the right one
-    const configs = [
-        `${API_BASE}/episode/sources?animeEpisodeId=${id}`,
-        `${API_BASE}/episode/sources?animeEpisodeId=${id}&server=hd-1&category=sub`,
-        `${API_BASE}/episode/sources?animeEpisodeId=${id}-episode-1&server=megacloud&category=sub`
+    const epNum = document.getElementById('epNum').value || "1";
+    status.innerText = "📡 Connecting...";
+
+    // This list targets the 'invalid anime episode id' error by trying multiple formats
+    const idVariants = [
+        `${currentAnimeId}-episode-${epNum}`,
+        `${currentAnimeId}-${epNum}`,
+        `${currentAnimeId}.${epNum}`,
+        currentAnimeId // fallback to original
     ];
 
-    for (let url of configs) {
+    for (let variant of idVariants) {
         try {
-            status.innerText = "📡 Testing Server Connection...";
+            console.log("Checking Variant:", variant);
+            // We force server=hd-1 and category=sub for highest success rate
+            const url = `${API_BASE}/episode/sources?animeEpisodeId=${variant}&server=hd-1&category=sub`;
             const res = await fetch(url);
             const json = await res.json();
             
@@ -98,11 +111,11 @@ async function startStreaming(id) {
                 return playVideo(json.data.sources[0].url);
             }
         } catch (e) {
-            console.log("Config failed, trying next...");
+            continue;
         }
     }
     
-    status.innerText = "❌ All servers failed. Try a different show.";
+    status.innerText = "❌ Stream Not Found";
 }
 
 function playVideo(m3u8) {
@@ -111,12 +124,17 @@ function playVideo(m3u8) {
     const finalLink = `${PROXY_URL}?url=${encodeURIComponent(m3u8)}`;
 
     if (Hls.isSupported()) {
-        const hls = new Hls();
+        const hls = new Hls({
+            xhrSetup: function(xhr) { xhr.withCredentials = false; }
+        });
         hls.loadSource(finalLink);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
             video.play();
             status.innerText = "🎬 Now Playing";
+        });
+        hls.on(Hls.Events.ERROR, (e, data) => {
+            if (data.fatal) hls.recoverMediaError();
         });
     } else {
         video.src = finalLink;
