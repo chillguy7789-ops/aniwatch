@@ -1,277 +1,197 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="utf-8">
-    <title>Aniwatch API</title>
-    <meta name="content-language" content="en">
-    <!-- <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self' https://api-aniwatch.onrender.com; style-src 'unsafe-inline'; img-src 'self' https://raw.githubusercontent.com https://img.shields.io https://contrib.rocks"> -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="title" content="Aniwatch API">
-    <meta name="theme-color" content="#d5b3ff">
-    <meta name="color-scheme" content="dark">
-    <link rel="canonical" href="https://api-aniwatch.onrender.com">
-    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
-    <meta property="og:image"
-        content="https://raw.githubusercontent.com/ghoshRitesh12/aniwatch-api/refs/heads/main/public/img/hianime_v2.png">
-    <meta property="og:url" content="https://api-aniwatch.onrender.com">
-    <meta property="og:image:width" content="500">
-    <meta property="og:image:height" content="500">
-    <meta property="og:site_name" content="aniwatch">
-    <meta property="og:type" content="website">
-    <meta name="twitter:card" content="summary_image">
-    <meta name="twitter:site" content="@aniwatch-api">
-    <meta name="twitter:title" content="Aniwatch API">
-    <meta name="twitter:description" content="NodeJS API for obtaining anime data from hianimez.to">
-    <meta name="twitter:image:src"
-        content="https://raw.githubusercontent.com/ghoshRitesh12/aniwatch-api/refs/heads/main/public/img/hianime_v2.png">
-    <meta name="keywords" content="hianime api scraper anime aniwatch node express typescript">
-    <meta property="og:title" content="Aniwatch API">
-    <meta name="description" content="NodeJS API for obtaining anime data from hianimez.to">
-    <meta property="og:description" content="NodeJS API for obtaining anime data from hianimez.to">
-    <link rel="shortcut icon"
-        href="https://raw.githubusercontent.com/ghoshRitesh12/aniwatch-api/refs/heads/main/public/img/hianime_v2.png">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swach</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Swach">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon-192.png" sizes="192x192">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+/* ─── YOUR ORIGINAL DESIGN TOKENS ─── */
+:root {
+  --bg0: #000000;
+  --bg1: #0a0a0a;
+  --bg2: #111111;
+  --bg3: #191919;
+  --bg4: #222222;
+  --accent: #ffffff;
+  --accent2: #cccccc;
+  --text0: #eeecff;
+  --text1: #a8a4c0;
+  --text2: #58566a;
+  --border: rgba(255,255,255,0.07);
+  --r: 10px;
+}
 
-    <style>
-        * {
-            box-sizing: border-box;
-            font-family: sans-serif;
-            transition:
-                0.15s ease scale,
-                0.15s ease width,
-                0.15s ease height,
-                0.15s ease gap;
-        }
+/* Base resets & scrollbars */
+*{margin:0;padding:0;box-sizing:border-box}
+body{ font-family:'Sora',sans-serif; background:var(--bg0); color:var(--text0); min-height:100vh; overflow-x:hidden; }
 
-        html {
-            --accent: #d5b3ff;
+/* ─── NAVIGATION ─── */
+#nav{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  height:62px;padding:0 20px;
+  display:flex;align-items:center;gap:16px;
+  background:rgba(0,0,0,0.92);
+  backdrop-filter:blur(24px) saturate(1.5);
+  border-bottom:1px solid var(--border);
+}
+.logo{ font-family:'Outfit',sans-serif;font-weight:900;font-size:21px; color:#ffffff; cursor:pointer; }
 
-            height: 100%;
-            color-scheme: dark;
-        }
+/* ─── WATCH PAGE LAYOUT ─── */
+.watchpage{ max-width:1440px; margin:0 auto; padding:80px 20px 48px; }
+.pwrap{
+  background:#000; border-radius:var(--r); overflow:hidden;
+  position:relative; aspect-ratio:16/9; border: 1px solid var(--border);
+}
+#video-player { width: 100%; height: 100%; }
 
-        body {
-            display: flex;
-            flex-direction: column;
-            font-family: sans-serif;
-            background-color: #151518;
-            padding: 0rem 1rem 0 1rem;
-            min-height: 98vh;
-        }
+/* ─── SEARCH & INPUTS ─── */
+.input-section { margin-top: 20px; display: flex; gap: 10px; }
+input { 
+  flex: 1; padding: 12px; border-radius: var(--r); 
+  background: var(--bg2); border: 1px solid var(--border); 
+  color: white; outline: none; 
+}
+button { 
+  padding: 12px 24px; border-radius: var(--r); border: none; 
+  background: #ffffff; color: #000; font-weight: 600; cursor: pointer; 
+}
 
-        section {
-            margin-block: auto;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: start;
-            position: relative;
-            isolation: isolate;
-        }
+/* Status text */
+#status { font-size: 12px; color: var(--text2); margin-top: 10px; text-align: center; }
 
-        section::before {
-            content: "";
-            width: 100%;
-            height: 100%;
-
-            position: absolute;
-            inset: -2rem 0 0 0;
-            isolation: isolate;
-            z-index: -1;
-
-            background-color: #7300ff;
-            opacity: .35;
-            border-radius: 50%;
-            filter: blur(12rem);
-        }
-
-        @media (min-width: 640px) {
-            section::before {
-                background-color: #7300ffbb;
-                opacity: .3;
-            }
-        }
-
-        .overlay {
-            position: fixed;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            overflow: hidden;
-
-            width: 100%;
-            min-height: 100%;
-            isolation: isolate;
-            z-index: -1;
-
-        }
-
-        .overlay .child {
-            background-position: center center;
-            background-size: cover;
-            position: absolute;
-            inset: 0;
-
-            opacity: .4;
-            filter: blur(5rem);
-            background-image: url(https://raw.githubusercontent.com/ghoshRitesh12/aniwatch-api/refs/heads/main/public/img/wano_kuni.png);
-        }
-
-        @media (min-width: 640px) {
-            .overlay .child {
-                opacity: .35;
-                filter: blur(8rem);
-            }
-        }
-
-        .overlay::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            z-index: 2;
-
-            background: url("https://raw.githubusercontent.com/ghoshRitesh12/aniwatch-api/refs/heads/main/public/img/dot.png") repeat;
-        }
-
-        h2 {
-            color: var(--accent);
-            margin-top: 0;
-            font-size: 1.65rem;
-            font-weight: 600;
-            text-align: center;
-            text-wrap: balance;
-        }
-
-        a {
-            line-height: 1.3;
-            text-wrap: balance;
-            color: var(--accent);
-        }
-
-        img {
-            object-fit: cover;
-            max-width: 100%;
-            font-size: .9rem;
-        }
-
-        #anime_girl {
-            width: 100%;
-            max-width: 10rem;
-        }
-
-        @media (min-width: 640px) {
-            #anime_girl {
-                max-width: 12rem;
-            }
-        }
-
-        .img-wrapper {
-            aspect-ratio: 1/1;
-            max-width: 12rem;
-            border-radius: 1rem;
-            overflow: hidden;
-            width: fit-content;
-            margin: 1rem auto 1.5rem auto;
-        }
-
-        .api-stats-container {
-            display: flex;
-            gap: .2rem .5rem;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-bottom: 1rem;
-        }
-
-        .api-stats-container a {
-            flex-shrink: 0;
-            user-select: none;
-        }
-
-        .contributors {
-            margin-top: 1rem;
-            text-align: center;
-        }
-    </style>
+/* ─── PWA BANNER ─── */
+.install-banner{
+  position:fixed;bottom:68px;left:12px;right:12px;z-index:400;
+  background:var(--bg2);border:1px solid rgba(255,255,255,.12);border-radius:14px;
+  padding:14px 16px;display:flex;align-items:center;gap:12px;
+  box-shadow:0 8px 40px rgba(0,0,0,.6);
+}
+</style>
 </head>
-
-<!--
-IMPORTANT:
-    1.  This API is just an unofficial API for hianimez.to and 
-        is in no other way officially related to the same.
-    2.  The content that this API provides is not mine, nor is 
-        it hosted by me. These belong to their respective 
-        owners. This API just demonstrates how to build an API
-        that scrapes websites and uses their content.
--->
-
 <body>
-    <span class="overlay">
-        <span class="child"></span>
-    </span>
 
-    <section>
-        <h2>
-            Welcome to the Aniwatch API
-            <span style="-webkit-text-fill-color: var(--accent)">⚔️</span>
-        </h2>
+<nav id="nav">
+    <div class="logo">SWACH</div>
+</nav>
 
-        <div class="api-stats-container">
-            <a href="https://github.com/ghoshRitesh12/aniwatch-api/stargazers">
-                <img src="https://img.shields.io/github/stars/ghoshRitesh12/aniwatch-api?style=social" alt="Stars"
-                    decoding="async">
-            </a>
-            <a href="https://github.com/ghoshRitesh12/aniwatch-api/network/members">
-                <img src="https://img.shields.io/github/forks/ghoshRitesh12/aniwatch-api?style=social" alt="Forks"
-                    decoding="async">
-            </a>
-            <a href="https://github.com/ghoshRitesh12/aniwatch-api/issues?q=is%3Aissue+is%3Aopen+">
-                <img src="https://img.shields.io/github/issues/ghoshRitesh12/aniwatch-api?style=social&logo=github"
-                    alt="Issues" decoding="async">
-            </a>
-            <a href="https://github.com/ghoshRitesh12/aniwatch-api/releases/latest">
-                <img src="https://img.shields.io/github/v/release/ghoshRitesh12/aniwatch-api?display_name=release&style=social&logo=github"
-                    alt="Version" decoding="async">
-            </a>
-        </div>
+<main class="watchpage">
+    <div class="pwrap">
+        <video id="video-player" controls playsinline></video>
+    </div>
 
-        <div style="text-align: center;">
-            <div class="img-wrapper">
-                <img draggable="false" id="anime_girl"
-                    src="https://raw.githubusercontent.com/ghoshRitesh12/aniwatch-api/refs/heads/main/public/img/hianime_v2.png"
-                    alt="kawai_anime_girl" decoding="async" fetchpriority="high" style="user-select: none;" />
-            </div>
+    <div class="input-section">
+        <input type="text" id="anime-id" placeholder="Enter Episode ID (e.g., steins-gate-1)">
+        <button onclick="playEpisode()">PLAY</button>
+    </div>
+    
+    <p id="status">Ready to stream...</p>
+</main>
 
-            <div style="display: flex; align-items: center; gap: .5rem; text-underline-offset: 3px;">
-                <a href="https://github.com/ghoshRitesh12/aniwatch-api/releases/latest" rel="noopener noreferer">
-                    Checkout latest changelogs
-                </a>
+<script>
+/**
+ * THE SWACH ENGINE
+ * Re-calibrated for the Render Proxy.
+ */
 
-                <span style="font-size: .9rem;">•</span>
+// Your new Render Backend URL
+const SERVER_URL = "https://aniwatch-g3v0.onrender.com";
+const PROXY_ENDPOINT = `${SERVER_URL}/swach/proxy`;
+const API_WATCH_ENDPOINT = `${SERVER_URL}/api/v2/hianime/watch`;
 
-                <a href="https://github.com/ghoshRitesh12/aniwatch-api#documentation" rel="noopener noreferer">
-                    Visit docs for more information
-                </a>
-            </div>
-        </div>
+async function playEpisode() {
+    const id = document.getElementById('anime-id').value;
+    const status = document.getElementById('status');
+    const video = document.getElementById('video-player');
 
-        <div class="contributors">
-            <p style="text-wrap: balance; line-height: 1.2;">Thanks to the following people for keeping this
-                project alive and
-                relevant.</p>
+    if (!id) return alert("Please enter an Episode ID!");
 
-            <a href="https://github.com/ghoshRitesh12/aniwatch-api/graphs/contributors"
-                style="display: block; margin-bottom: 1rem; user-select: none;">
-                <img src="https://contrib.rocks/image?repo=ghoshRitesh12/aniwatch-api" alt="Contributors"
-                    decoding="async">
-            </a>
-        </div>
-    </section>
+    status.innerText = "🔍 Fetching source from API...";
+
+    try {
+        // 1. Get raw video data from your Hianime API
+        const response = await fetch(`${API_WATCH_ENDPOINT}?episodeId=${id}`);
+        const data = await response.json();
+        
+        if (!data.sources || data.sources.length === 0) {
+            throw new Error("No video sources found.");
+        }
+
+        // 2. Select the first source (.m3u8)
+        const rawM3u8 = data.sources[0].url;
+
+        // 3. Construct the Proxied URL
+        // We use encodeURIComponent to ensure the full link passes through safely
+        const proxiedUrl = `${PROXY_ENDPOINT}?url=${encodeURIComponent(rawM3u8)}`;
+
+        status.innerText = "🌀 Manifest Rewriting in progress... Please wait.";
+
+        // 4. Initialize HLS.js for Android/Chrome or native for Safari/iOS
+        if (Hls.isSupported()) {
+            const hls = new Hls();
+            hls.loadSource(proxiedUrl);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                status.innerText = "✅ Stream active.";
+                video.play();
+            });
+            
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    status.innerText = "❌ Proxy Blocked. Check Render logs.";
+                }
+            });
+        } 
+        else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            // Native support for Safari (iPhone)
+            video.src = proxiedUrl;
+            video.play();
+            status.innerText = "✅ Streaming natively.";
+        }
+    } catch (err) {
+        status.innerText = `⚠️ Error: ${err.message}`;
+        console.error(err);
+    }
+}
+
+/* ─── PWA INSTALL LOGIC ─── */
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _deferredInstall = e;
+  setTimeout(showInstallBanner, 4000);
+});
+
+function showInstallBanner() {
+  if(!_deferredInstall) return;
+  const b = document.createElement('div');
+  b.className = 'install-banner';
+  b.innerHTML = `
+    <div style="flex:1">
+      <div style="font-size:13px;font-weight:600">Install Swach</div>
+      <div style="font-size:11px;color:var(--text2)">Add to Home Screen for the full experience</div>
+    </div>
+    <button onclick="doInstall()" style="padding:8px 16px; font-size:11px">Install</button>
+  `;
+  document.body.appendChild(b);
+}
+
+async function doInstall() {
+  if(!_deferredInstall) return;
+  _deferredInstall.prompt();
+  _deferredInstall = null;
+  document.querySelector('.install-banner').remove();
+}
+</script>
 </body>
-
 </html>
