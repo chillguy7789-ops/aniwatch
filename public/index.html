@@ -18,7 +18,7 @@
         .search-row { display: flex; gap: 10px; }
         input { flex: 1; background: #111; border: 1px solid #222; padding: 12px; border-radius: 8px; color: #fff; outline: none; }
         button { background: var(--accent); color: #000; border: none; padding: 0 20px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-        #status { font-size: 11px; color: var(--dim); text-align: center; min-height: 15px; }
+        #status { font-size: 11px; color: var(--dim); text-align: center; min-height: 15px; text-transform: uppercase; }
         .results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-height: 250px; overflow-y: auto; }
         .anime-item { background: #111; padding: 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid #222; }
     </style>
@@ -32,7 +32,7 @@
             <div class="video-container"><video id="video" controls playsinline></video></div>
             <div class="controls">
                 <div class="search-row">
-                    <input type="text" id="query" placeholder="Search Anime...">
+                    <input type="text" id="query" placeholder="Search (e.g. Solo Leveling)">
                     <button onclick="searchAnime()">FIND</button>
                 </div>
                 <div id="status">READY</div>
@@ -55,65 +55,62 @@ async function searchAnime() {
     try {
         const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
         const json = await res.json();
-        json.data.animes.slice(0, 6).forEach(anime => {
+        const list = json.data.animes || [];
+        list.slice(0, 6).forEach(anime => {
             const div = document.createElement('div');
             div.className = 'anime-item';
             div.innerText = anime.name;
-            div.onclick = () => getRealEpisodeId(anime.id);
+            div.onclick = () => bruteForceStream(anime.id);
             resDiv.appendChild(div);
         });
-        status.innerText = "SELECT AN ANIME";
+        status.innerText = list.length ? "SELECT AN ANIME" : "NO RESULTS";
     } catch (e) { status.innerText = "SEARCH ERROR"; }
 }
 
-async function getRealEpisodeId(animeId) {
+async function bruteForceStream(animeId) {
     const status = document.getElementById('status');
-    status.innerText = "🚀 FETCHING EPISODE LIST...";
-    try {
-        // STEP 1: Get the actual anime info
-        const res = await fetch(`${API_BASE}/anime/${animeId}`);
-        const json = await res.json();
-        
-        // Check where the episodes are hiding in your API version
-        const episodes = json.data.episodes;
-        if (!episodes || episodes.length === 0) throw new Error("No episodes in data");
+    status.innerText = "🛠️ BYPASSING LIST: BRUTE FORCING...";
+    
+    // Pattern 1: animeId-episode-1 (Most common)
+    // Pattern 2: animeId-1
+    // Pattern 3: animeId (Some are IDs themselves)
+    const variants = [`${animeId}-episode-1`, `${animeId}-1`, animeId];
+    const servers = ['hd-1', 'megacloud', 'streamsb'];
 
-        // STEP 2: Use the exact ID provided by the API (e.g., "one-piece-episode-1")
-        const realId = episodes[0].episodeId;
-        playStream(realId);
-    } catch (e) {
-        status.innerText = "❌ EPISODE LIST FAILED: " + e.message;
-        console.error(e);
+    for (let id of variants) {
+        for (let s of servers) {
+            try {
+                status.innerText = `📡 TRYING ${s.toUpperCase()} ON ${id.split('-').pop()}...`;
+                const url = `${API_BASE}/episode/sources?animeEpisodeId=${id}&server=${s}&category=sub`;
+                const res = await fetch(url);
+                const json = await res.json();
+
+                if (json.data && json.data.sources && json.data.sources.length > 0) {
+                    return playStream(json.data.sources[0].url);
+                }
+            } catch (e) { continue; }
+        }
     }
+    status.innerText = "❌ ALL ATTEMPTS FAILED. SCRAPER OUTDATED.";
 }
 
-async function playStream(realId) {
+function playStream(m3u8) {
+    const video = document.getElementById('video');
     const status = document.getElementById('status');
-    status.innerText = "📡 CONNECTING TO STREAM...";
-    try {
-        // STEP 3: Request sources with the verified ID
-        const res = await fetch(`${API_BASE}/episode/sources?animeEpisodeId=${realId}&server=hd-1&category=sub`);
-        const json = await res.json();
-        
-        if (!json.data.sources) throw new Error("No video sources");
+    const finalLink = `${PROXY_URL}?url=${encodeURIComponent(m3u8)}`;
 
-        const m3u8 = json.data.sources[0].url;
-        const finalLink = `${PROXY_URL}?url=${encodeURIComponent(m3u8)}`;
-
-        const video = document.getElementById('video');
-        if (Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(finalLink);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                video.play();
-                status.innerText = "🎬 NOW PLAYING";
-            });
-        } else {
-            video.src = finalLink;
+    if (Hls.isSupported()) {
+        const hls = new Hls({ xhrSetup: (xhr) => { xhr.withCredentials = false; } });
+        hls.loadSource(finalLink);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
             video.play();
-        }
-    } catch (e) { status.innerText = "❌ STREAM ERROR"; }
+            status.innerText = "🎬 NOW PLAYING";
+        });
+    } else {
+        video.src = finalLink;
+        video.play();
+    }
 }
 </script>
 </body>
