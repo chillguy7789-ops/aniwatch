@@ -12,16 +12,17 @@
         .logo { font-family: 'Outfit', sans-serif; font-size: 32px; margin-bottom: 20px; letter-spacing: -1px; color: var(--accent); }
         .container { width: 100%; max-width: 500px; }
         .player-box { background: var(--card); border-radius: 12px; border: 1px solid #1a1a1a; overflow: hidden; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .video-container { width: 100%; aspect-ratio: 16/9; background: #000; }
-        video { width: 100%; height: 100%; }
+        .video-container { width: 100%; aspect-ratio: 16/9; background: #000; position: relative; }
+        video { width: 100%; height: 100%; background: #000; }
         .controls { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
         .search-row { display: flex; gap: 10px; }
-        input { flex: 1; background: #111; border: 1px solid #222; padding: 12px; border-radius: 8px; color: #fff; outline: none; }
-        button { background: var(--accent); color: #000; border: none; padding: 0 20px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-        #status { font-size: 11px; color: var(--dim); text-align: center; height: 15px; }
-        .results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-height: 200px; overflow-y: auto; }
-        .anime-item { background: #111; padding: 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid #222; transition: 0.2s; }
+        input { flex: 1; background: #111; border: 1px solid #222; padding: 12px; border-radius: 8px; color: #fff; outline: none; font-family: inherit; }
+        button { background: var(--accent); color: #000; border: none; padding: 0 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: 'Outfit'; }
+        #status { font-size: 11px; color: var(--dim); text-align: center; min-height: 15px; text-transform: uppercase; letter-spacing: 1px; }
+        .results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-height: 250px; overflow-y: auto; }
+        .anime-item { background: #111; padding: 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid #222; transition: 0.2s; display: flex; justify-content: space-between; }
         .anime-item:hover { border-color: #444; background: #161616; }
+        .anime-item span { color: var(--dim); font-size: 11px; }
     </style>
 </head>
 <body>
@@ -31,11 +32,11 @@
     <div class="container">
         <div class="player-box">
             <div class="video-container">
-                <video id="video" controls playsinline poster="https://static.vecteezy.com/system/resources/previews/001/225/860/original/abstract-black-background-with-geometric-shapes-vector.jpg"></video>
+                <video id="video" controls playsinline></video>
             </div>
             <div class="controls">
                 <div class="search-row">
-                    <input type="text" id="query" placeholder="Search anime...">
+                    <input type="text" id="query" placeholder="Search anime (e.g. One Piece)">
                     <button onclick="searchAnime()">FIND</button>
                 </div>
                 <div id="status">Ready</div>
@@ -54,14 +55,12 @@ async function searchAnime() {
     const status = document.getElementById('status');
     if (!q) return;
 
-    status.innerText = "🔍 Searching...";
+    status.innerText = "🔍 Searching Database...";
     resDiv.innerHTML = "";
 
     try {
         const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
         const json = await res.json();
-        
-        // v2 API nests 'animes' inside 'data'
         const animeList = json.data.animes;
         
         if (!animeList || animeList.length === 0) {
@@ -72,68 +71,89 @@ async function searchAnime() {
         animeList.slice(0, 6).forEach(anime => {
             const div = document.createElement('div');
             div.className = 'anime-item';
-            div.innerText = anime.name;
+            div.innerHTML = `<div>${anime.name}</div><span>${anime.jname || ''}</span>`;
             div.onclick = () => getEpisodes(anime.id);
             resDiv.appendChild(div);
         });
-        status.innerText = "Select an anime:";
+        status.innerText = "Select an anime to play:";
     } catch (e) {
-        status.innerText = "Search Error. Use ID directly.";
-        console.error(e);
+        status.innerText = "Search failed. Try again.";
     }
 }
 
 async function getEpisodes(animeId) {
     const status = document.getElementById('status');
-    status.innerText = "🚀 Loading Stream...";
+    status.innerText = "🚀 Loading Episode List...";
     document.getElementById('results').innerHTML = "";
 
     try {
-        // v2 logic: Use /episode/sources with the ID
-        const res = await fetch(`${API_BASE}/episode/sources?animeEpisodeId=${animeId}`);
+        const res = await fetch(`${API_BASE}/anime/${animeId}`);
         const json = await res.json();
         
-        if (!json.data || !json.data.sources || json.data.sources.length === 0) {
-            // If that fails, the ID might be for the ANIME, not the EPISODE.
-            // Let's try to get the first episode ID instead.
-            status.innerText = "Finding episode 1...";
-            const infoRes = await fetch(`${API_BASE}/anime/${animeId}`);
-            const infoJson = await infoRes.json();
-            const firstEp = infoJson.data.episodes[0].episodeId;
-            return loadVideo(firstEp);
+        if (!json.data || !json.data.episodes || json.data.episodes.length === 0) {
+            throw new Error("No episodes found.");
         }
 
-        loadVideoFromData(json.data.sources[0].url);
+        // We automatically target Episode 1 for the quick test
+        const firstEpId = json.data.episodes[0].episodeId;
+        fetchStream(firstEpId);
     } catch (e) {
-        status.innerText = "Stream Error.";
+        status.innerText = "❌ Info Error: " + e.message;
     }
 }
 
-async function loadVideo(epId) {
-    try {
-        const res = await fetch(`${API_BASE}/episode/sources?animeEpisodeId=${epId}`);
-        const json = await res.json();
-        loadVideoFromData(json.data.sources[0].url);
-    } catch (e) {
-        document.getElementById('status').innerText = "Failed to load video.";
-    }
-}
-
-function loadVideoFromData(m3u8) {
-    const video = document.getElementById('video');
+async function fetchStream(epId) {
     const status = document.getElementById('status');
-    const finalLink = `${PROXY_URL}?url=${encodeURIComponent(m3u8)}`;
+    const video = document.getElementById('video');
+    status.innerText = "📡 Identifying Servers...";
 
-    if (Hls.isSupported()) {
-        const hls = new Hls();
-        hls.loadSource(finalLink);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-    } else {
-        video.src = finalLink;
-        video.play();
+    try {
+        // Step 1: Find which servers are hosting this episode
+        const serverRes = await fetch(`${API_BASE}/servers?episodeId=${epId}`);
+        const serverJson = await serverRes.json();
+        
+        if (!serverJson.data || !serverJson.data.sub || serverJson.data.sub.length === 0) {
+            throw new Error("No active servers.");
+        }
+
+        // Step 2: Pick the primary server (usually hd-1)
+        const serverName = serverJson.data.sub[0].serverName;
+        status.innerText = `🔗 Connecting to ${serverName.toUpperCase()}...`;
+
+        // Step 3: Get the actual M3U8 source link
+        const sourceRes = await fetch(`${API_BASE}/episode/sources?animeEpisodeId=${epId}&server=${serverName}&category=sub`);
+        const sourceJson = await sourceRes.json();
+
+        if (!sourceJson.data || !sourceJson.data.sources || sourceJson.data.sources.length === 0) {
+            throw new Error("Source restricted or blocked.");
+        }
+
+        const m3u8 = sourceJson.data.sources[0].url;
+        const finalLink = `${PROXY_URL}?url=${encodeURIComponent(m3u8)}`;
+
+        // Step 4: Initialize Player
+        if (Hls.isSupported()) {
+            const hls = new Hls({
+                xhrSetup: function(xhr) { xhr.withCredentials = false; }
+            });
+            hls.loadSource(finalLink);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play();
+                status.innerText = "🎬 Now Playing";
+            });
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) status.innerText = "⚠️ Buffer Error: Retrying...";
+            });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = finalLink;
+            video.play();
+            status.innerText = "🎬 Now Playing";
+        }
+    } catch (e) {
+        status.innerText = "❌ Stream Error: Try another show.";
+        console.error(e);
     }
-    status.innerText = "🎬 Now Playing";
 }
 </script>
 </body>
