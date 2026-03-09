@@ -11,20 +11,16 @@
         body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .logo { font-family: 'Outfit', sans-serif; font-size: 32px; margin-bottom: 20px; letter-spacing: -1px; color: var(--accent); }
         .container { width: 100%; max-width: 500px; }
-        .player-box { background: var(--card); border-radius: 12px; border: 1px solid #1a1a1a; overflow: hidden; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .video-container { width: 100%; aspect-ratio: 16/9; background: #000; position: relative; }
-        video { width: 100%; height: 100%; background: #000; }
+        .player-box { background: var(--card); border-radius: 12px; border: 1px solid #1a1a1a; overflow: hidden; margin-bottom: 20px; }
+        .video-container { width: 100%; aspect-ratio: 16/9; background: #000; }
+        video { width: 100%; height: 100%; }
         .controls { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-        .search-row, .ep-row { display: flex; gap: 10px; }
-        input { flex: 1; background: #111; border: 1px solid #222; padding: 12px; border-radius: 8px; color: #fff; outline: none; font-family: inherit; }
-        .ep-input { max-width: 80px; text-align: center; }
-        button { background: var(--accent); color: #000; border: none; padding: 0 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: 'Outfit'; transition: 0.2s; }
-        button:active { transform: scale(0.95); opacity: 0.8; }
-        #status { font-size: 11px; color: var(--dim); text-align: center; min-height: 15px; text-transform: uppercase; letter-spacing: 1px; }
-        .results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-height: 200px; overflow-y: auto; }
-        .anime-item { background: #111; padding: 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
-        .anime-item:hover { border-color: #444; background: #161616; }
-        .anime-item span { color: var(--dim); font-size: 10px; background: #222; padding: 2px 6px; border-radius: 4px; }
+        .search-row { display: flex; gap: 10px; }
+        input { flex: 1; background: #111; border: 1px solid #222; padding: 12px; border-radius: 8px; color: #fff; outline: none; }
+        button { background: var(--accent); color: #000; border: none; padding: 0 20px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+        #status { font-size: 11px; color: var(--dim); text-align: center; min-height: 15px; }
+        .results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-height: 250px; overflow-y: auto; }
+        .anime-item { background: #111; padding: 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid #222; }
     </style>
 </head>
 <body>
@@ -33,18 +29,13 @@
 
     <div class="container">
         <div class="player-box">
-            <div class="video-container">
-                <video id="video" controls playsinline></video>
-            </div>
+            <div class="video-container"><video id="video" controls playsinline></video></div>
             <div class="controls">
                 <div class="search-row">
-                    <input type="text" id="query" placeholder="Search (e.g. Naruto)">
+                    <input type="text" id="query" placeholder="Search Anime...">
                     <button onclick="searchAnime()">FIND</button>
                 </div>
-                <div class="ep-row">
-                    <input type="number" id="epNum" class="ep-input" value="1" placeholder="Ep">
-                    <div id="status" style="flex:1; align-self: center;">Ready</div>
-                </div>
+                <div id="status">READY</div>
                 <div id="results" class="results"></div>
             </div>
         </div>
@@ -53,94 +44,76 @@
 <script>
 const API_BASE = "/api/v2/hianime";
 const PROXY_URL = "/swach/proxy";
-let currentAnimeId = "";
 
 async function searchAnime() {
     const q = document.getElementById('query').value;
     const resDiv = document.getElementById('results');
     const status = document.getElementById('status');
     if (!q) return;
-
-    status.innerText = "🔍 Searching...";
+    status.innerText = "🔍 SEARCHING...";
     resDiv.innerHTML = "";
-
     try {
         const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
         const json = await res.json();
-        const animeList = json.data.animes;
-        
-        animeList.slice(0, 6).forEach(anime => {
+        json.data.animes.slice(0, 6).forEach(anime => {
             const div = document.createElement('div');
             div.className = 'anime-item';
-            div.innerHTML = `<div>${anime.name}</div><span>${anime.id}</span>`;
-            div.onclick = () => {
-                currentAnimeId = anime.id;
-                startStreaming();
-            };
+            div.innerText = anime.name;
+            div.onclick = () => getRealEpisodeId(anime.id);
             resDiv.appendChild(div);
         });
-        status.innerText = "Select an anime";
+        status.innerText = "SELECT AN ANIME";
+    } catch (e) { status.innerText = "SEARCH ERROR"; }
+}
+
+async function getRealEpisodeId(animeId) {
+    const status = document.getElementById('status');
+    status.innerText = "🚀 FETCHING EPISODE LIST...";
+    try {
+        // STEP 1: Get the actual anime info
+        const res = await fetch(`${API_BASE}/anime/${animeId}`);
+        const json = await res.json();
+        
+        // Check where the episodes are hiding in your API version
+        const episodes = json.data.episodes;
+        if (!episodes || episodes.length === 0) throw new Error("No episodes in data");
+
+        // STEP 2: Use the exact ID provided by the API (e.g., "one-piece-episode-1")
+        const realId = episodes[0].episodeId;
+        playStream(realId);
     } catch (e) {
-        status.innerText = "Search Error.";
+        status.innerText = "❌ EPISODE LIST FAILED: " + e.message;
+        console.error(e);
     }
 }
 
-async function startStreaming() {
-    if (!currentAnimeId) return;
+async function playStream(realId) {
     const status = document.getElementById('status');
-    const epNum = document.getElementById('epNum').value || "1";
-    status.innerText = "📡 Connecting...";
+    status.innerText = "📡 CONNECTING TO STREAM...";
+    try {
+        // STEP 3: Request sources with the verified ID
+        const res = await fetch(`${API_BASE}/episode/sources?animeEpisodeId=${realId}&server=hd-1&category=sub`);
+        const json = await res.json();
+        
+        if (!json.data.sources) throw new Error("No video sources");
 
-    // This list targets the 'invalid anime episode id' error by trying multiple formats
-    const idVariants = [
-        `${currentAnimeId}-episode-${epNum}`,
-        `${currentAnimeId}-${epNum}`,
-        `${currentAnimeId}.${epNum}`,
-        currentAnimeId // fallback to original
-    ];
+        const m3u8 = json.data.sources[0].url;
+        const finalLink = `${PROXY_URL}?url=${encodeURIComponent(m3u8)}`;
 
-    for (let variant of idVariants) {
-        try {
-            console.log("Checking Variant:", variant);
-            // We force server=hd-1 and category=sub for highest success rate
-            const url = `${API_BASE}/episode/sources?animeEpisodeId=${variant}&server=hd-1&category=sub`;
-            const res = await fetch(url);
-            const json = await res.json();
-            
-            if (json.data && json.data.sources && json.data.sources.length > 0) {
-                return playVideo(json.data.sources[0].url);
-            }
-        } catch (e) {
-            continue;
-        }
-    }
-    
-    status.innerText = "❌ Stream Not Found";
-}
-
-function playVideo(m3u8) {
-    const video = document.getElementById('video');
-    const status = document.getElementById('status');
-    const finalLink = `${PROXY_URL}?url=${encodeURIComponent(m3u8)}`;
-
-    if (Hls.isSupported()) {
-        const hls = new Hls({
-            xhrSetup: function(xhr) { xhr.withCredentials = false; }
-        });
-        hls.loadSource(finalLink);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        const video = document.getElementById('video');
+        if (Hls.isSupported()) {
+            const hls = new Hls();
+            hls.loadSource(finalLink);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play();
+                status.innerText = "🎬 NOW PLAYING";
+            });
+        } else {
+            video.src = finalLink;
             video.play();
-            status.innerText = "🎬 Now Playing";
-        });
-        hls.on(Hls.Events.ERROR, (e, data) => {
-            if (data.fatal) hls.recoverMediaError();
-        });
-    } else {
-        video.src = finalLink;
-        video.play();
-        status.innerText = "🎬 Now Playing";
-    }
+        }
+    } catch (e) { status.innerText = "❌ STREAM ERROR"; }
 }
 </script>
 </body>
