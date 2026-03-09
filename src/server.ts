@@ -20,7 +20,7 @@ import pkgJson from "../package.json" with { type: "json" };
 
 const BASE_PATH = "/api/v2" as const;
 
-// 1. Initialize the app first!
+// 1. Initialize the app
 const app = new Hono<ServerContext>();
 
 // 2. Attach Global Middleware
@@ -31,7 +31,7 @@ app.use(cacheControl);
 /*
     -------------------------------------------------------
     SWACH CUSTOM PLAYER PROXY
-    This bypasses CORS and Referer blocks for your mobile app.
+    Bypasses CORS/Referer blocks. Uses 'as any' to fix TS2769.
     -------------------------------------------------------
 */
 app.get('/swach/proxy', async (c) => {
@@ -48,12 +48,13 @@ app.get('/swach/proxy', async (c) => {
         }
       });
 
-      // Pass the stream body directly to the client (phone)
-      return c.body(response.body, {
+      // Using 'as any' on the body and status to satisfy Hono's TS overloads
+      return c.body(response.body as any, {
+        status: response.status as any,
         headers: {
           'Content-Type': response.headers.get('Content-Type') || 'application/vnd.apple.mpegurl',
           'Access-Control-Allow-Origin': '*', 
-          'Cache-Control': 'public, max-age=3600'
+          'Cache-Control': 'public, max-age=3600',
         }
       });
   } catch (err: any) {
@@ -93,7 +94,7 @@ app.basePath(BASE_PATH).get("/anicrush", (c) =>
 app.notFound(notFoundHandler);
 app.onError(errorHandler);
 
-// Server Execution
+// Server Execution Block
 (function () {
     if (SERVERLESS_ENVIRONMENTS.includes(env.ANIWATCH_API_DEPLOYMENT_ENV)) {
         return;
